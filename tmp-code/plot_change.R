@@ -1,5 +1,3 @@
-setwd("~/ownCloud/SparkStreet Work/GFF Methods Paper")
-
 # Install packages
 library(tidyverse)
 library(quantreg)
