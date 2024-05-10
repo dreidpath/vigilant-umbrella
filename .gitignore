@@ -7,9 +7,9 @@
 .RDataTmp
 
 # Imported Data
-*.xlsx
-*.xls
-*.csv
+data/*.xlsx
+data/*.xls
+data/*.csv
 
 # User-specific files
 .Ruserdata
