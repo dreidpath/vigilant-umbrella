@@ -3,8 +3,6 @@
 # ZERO-INFLATED BETA REGRESSION                      #
 ######################################################
 
-# Set the working directory
-setwd("~/ownCloud/SparkStreet Work/GFF Methods Paper")
 
 ########## Load relevant libraries
 library(tidyverse) # For data wrangling
