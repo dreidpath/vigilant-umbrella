@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)  # Generalised framework for data manipiulation in R
 library(brms)  # Wrapper for Bayesian analysis using Stan
 library(cmdstanr)  # Package for using cmdstanr as the backend Bayesian computational engine
-setwd("~/ownCloud/SparkStreet Work/GFF Methods Paper")  # Set the working directory
+
 ```
 
 ## Data setup
