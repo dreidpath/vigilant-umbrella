@@ -22,7 +22,7 @@ Load the GFF data on country-level IDA in general and RMNCAH-N allocations speci
 ```{r gffdata, echo=false}
 
 # Read in the data
-gffDF <- readxl::read_excel("GFF and IDA to RMNCAH-N - Summarized data for FY2011-2023.xlsx", sheet = "Sum data")
+gffDF <- readxl::read_excel("./data/GFF and IDA to RMNCAH-N - Summarized data for FY2011-2023.xlsx", sheet = "Sum data")
 # Create an outcome variable (ida_prop) representing the proportion of IDA spending on RMNCAH-N
 gffDF$ida_prop <- gffDF$rmnch_total_ida/gffDF$ida_commit
 # Create a "treatment" flag representing when GFF funding was used to support RMNCAH-N spending of IDA
