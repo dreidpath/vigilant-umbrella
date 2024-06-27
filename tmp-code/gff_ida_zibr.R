@@ -12,7 +12,7 @@ library(cmdstanr)  # Stan program for Bayesian modelling
 
 ########## Import and wrangle the data
 # Import the data
-gffDF <- read_excel("GFF and IDA to RMNCAH-N - Summarized data for FY2011-2023.xlsx", sheet = "Sum data")
+gffDF <- read_excel("./data/GFF and IDA to RMNCAH-N - Summarized data for FY2011-2023.xlsx", sheet = "Sum data")
 # Create a flag marking the year of first "treatment" for Partner countries 
 gffDF$treatment_flag <- ifelse(gffDF$gff_partnership_date <= gffDF$project_approval_fy & gffDF$gff_partner == 1, 1, 0)  # Treatment flag
 
@@ -44,6 +44,8 @@ gffDF$ida_prop[gffDF$ida_prop==1] <- 0.999
 gffDF$country <- as.factor(gffDF$country)  
 
 ########## Model the data
+# Set the random seed for replication
+set.seed(314157)
 ##  Bayesian zero-inflated beta regression for partner countries only
 zib_1 <- brm(bf(ida_prop ~ year_c + treatment_flag + (1|country),   # Bayesian model with a random effect for country
                 zi ~ year_c + treatment_flag + (1|country)), # zero-inflated portion of the model
@@ -57,6 +59,8 @@ summary(zib_1)
 
 
 ## This model needs work.
+# Set the random seed for replication
+set.seed(314157)
 ##  Bayesian zero-inflated beta regression for eligible countries 
 zib_2 <- brm(bf(ida_prop ~ year_c + treatment_flag + (1|country),   # Bayesian model with a random effect for country
                 zi ~ year_c + treatment_flag + (1|country)), # zero-inflated portion of the model

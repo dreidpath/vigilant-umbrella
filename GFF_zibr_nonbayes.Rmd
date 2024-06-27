@@ -1,0 +1,164 @@
+---
+title: "Research Note on the ZIBR model of RMNCAH-N commitments"
+author: "Spark Street Consulting"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+     latex_engine: xelatex
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+########## Load the data
+source("./code/get-data.R")
+########## Load relevant libraries
+library(glmmTMB)  # Non-Bayesian package for zibr models
+
+# Create a centered year (`time`) around the start of the GFF partnership date.
+gffDF$time <-  gffDF$project_approval_fy - gffDF$gff_partnership_date 
+
+#rename the `treatment_flag` variable, `partner` to harmonise approaches. 
+names(gffDF)[names(gffDF)=="treatment_flag"] <- "partner"
+
+```
+
+
+# Background
+There is a basic causal question driving this analysis: did GFF support increase the proportion of IDA commitments to RMNCAH-N in the $32$ partner countries? This research note focuses on _one_, quasi-experimental approach to a causal analysis: a longitudinal design with staggered intervention (LDSI). 
+
+Usually, a generalized difference-in-difference (DiD) analysis would be the preferred approach to answering the question. The approach of Callaway and Sant'Anna's for staggered intervention, for instance, could work. However, in many cases $0$% of IDA was committed to RMNCAH-N (in a given country in a given year) giving rise to an inflation of $0$'s in the proportions, which requires separate models for the continuous proportion and the zero-inflation.  Also, in the DiD approach time (year) is treated as a series of discrete periods rather than a continuous variable, and for the purposes here, the models are too unstable.
+
+As an alternative a zero-inflated beta regression (ZIBR) model was used to model the entire range of proportions where the overall likelihood of the model is a combination of the likelihoods from the beta regression component and the zero-inflation component. The interaction effect of year by the treatment (i.e., partnership) captures the causal logic of the DiD. The interaction effect tests the trajectory of the outcome after the treatment is implemented, compared to the counterfactual trajectory implied by not-yet-treated countries and pre-treatment trends.
+
+# Approach
+
+## The basic ZIBR model
+
+In ZIBR, the beta regression models the continuous proportion data that falls within the closed interval $(0, 1)$. The zero-inflation component models the excess zeros in the data that cannot be adequately captured by the beta distribution alone. It assumes that the zeros come from two sources: structural zeros (true zeros) and sampling zeros (zeros due to sampling variability). The ZIBR model is formally specified as follows.
+
+Let $y_{ij}$ be the response variable indicating the proportion of IDA allocated to RMNCAH-N for year $i$ in country $j$, where $i = 1, ..., n_j$ and $j = 1, ..., J$.
+
+In the Beta Regression Component: for $y_{ij} \in (0, 1)$, assume $y_{ij}$ follows a beta distribution: $y_{ij} \sim \mathrm{Beta}(\mu_{ij}, \phi)$; where $\mu_{ij}$ is the mean parameter, and $\phi$ is a constant across observations.
+
+In the Zero-Inflation Component: for $y_{ij} = 0$, assume $y_{ij}$ comes from a Bernoulli distribution: $y_{ij} \sim \mathrm{Bernoulli}(\pi_{ij})$; where the probability of observing a zero $\pi_{ij}$ is modeled using the logit model of linear predictors.
+
+The overall likelihood in ZIBR is the product of the likelihoods from both components. Specifically, it combines the likelihood of observing a zero (from the zero-inflation component) with the likelihood of observing a non-zero proportion (from the beta regression), weighted by their respective probabilities. In the widely adopted Wilkinson and Rogers (1973) (W&R) formulation (including in the R statistical environment), the beta regression and the zero inflation components for the DiD would be written as follows:
+
+Beta-regression: `proportion ~ time + patner + time:partner + covariates`
+
+Zero-inflation: `~ time * partner + time:partner + covariates`
+
+
+## Data
+
+The original data on IDA commitments contained the following variables. 
+
+1. **country**: (string) anonymised country name.
+2. **gff_partner**: (binary) a flag indicating whether a country is a GFF partner country (1) or an eligible partner country but not yet supported (0). _Note bene_: All countries (i.e., gff_partner==0) that never became partner countries during the period of analysis were removed from this analysis because of the heterogeneity between _partner_ and _eligible_ countries.
+3. **gff_partnership_date**: (integer) the effective partnership start date for each of the GFF partner countries.
+4. **project_approval_fy**: (integer) the fiscal year of _any_ IDA commitment to a particular country.
+5. **ida_commit**: (integer) The total value in dollars of all IDA committed to a country in a fiscal year (including any RMNCHA_N commitment).
+6. **rmnch_total_ida**: (integer) The total value in dollars of all IDA committed to RMNCAH-N in a country in a fiscal year.
+
+As noted in point $2$ above, only GFF partner countries were retained in the analysis. The following synthetic variables were added to the analysis.
+
+7. **partner**: (binary) a binary flag indicating whether for a particular year a country was a GFF partner (i.e., 1 if the country had been moved from _eligible_ to _partner_ in that or some previous year, 0 if they had not yet become a _partner_). The dummy variable recorded the staggered treatment
+8. **time**: (integer) a centered year (`time`) around the start of the GFF partnership date. Centering was used to (i) stabilise the year estimate, (ii) make it more easily interpretable, and (iii) center on the actual start date of partnership for each country.
+9. **ida_prop**: (real) a value between 0 and 1 indicating the proportion of the IDA commitment for a particular country in a particular year that was allocated to RMNCAH-N (i.e., _rmnch_total_ida_/_ida_commit_). _Note bene_: when ida_prop==1, the value was reduced to $0.999$ to ensure that all values lay in the closed interval $(0,1)$.
+
+
+## Data analysis
+
+The analysis of the GFF data was conducted in `r R.Version()$version.string` using the glmmTMB ("Generalized Linear Mixed Models using Template Model Builder") package (1.1.9).
+
+We started with the elements of year and treatment: `year_c * treatment_flag`; a shorthand for `year_c + treatment_flag + year_c:treatment_flag`, representing the main effects for `year` and `treatment`, and their interaction effect. Included in the model is a covariate for the dollar value of the IDA commitment to a country in a particular year: `log(ida_commit)`. Where the IDA commitment was 0, a small non-zero value was added to avoid an analytic error associated with `log(0)`. A random effect (`(1 | country)`) was included in the model to account for the hierarchical nature of the data.
+
+
+#### Model 1: Full model
+
+The full model that was the base for the analysis was:
+```
+glmmTMB(ida_prop ~ time * partner + log(ida_commit) + (1 | country), 
+   ziformula = ~ time * partner + log(ida_commit) + (1 | country),
+   family = beta_family(link = "logit"))
+```
+
+Two alternative, reduced form models were tested successively using a likelihood ratio test.
+
+
+#### Model 2: Test the exclusion of `ida_commit` from the model
+```
+glmmTMB(ida_prop ~ time * partner + (1 | country), 
+   ziformula = ~ time * partner + (1 | country),
+   family = beta_family(link = "logit"))
+```
+
+#### Model 3: Test the exclusion of the interaction effect: `year_c:treatment_flag`
+```
+glmmTMB(ida_prop ~ time + partner + log(ida_commit) + (1 | country), 
+   ziformula = ~ time + partner + log(ida_commit) + (1 | country),
+   family = beta_family(link = "logit"))
+```
+
+# Results
+
+#### Model 1: Full model
+
+``` {r model_1, include = FALSE}
+# Fit a zero-inflated beta regression model
+model1 <- glmmTMB(ida_prop ~ time + partner + time:partner + log(ida_commit) + (1 | country), 
+                 ziformula = ~ time + partner + time:partner + log(ida_commit) + (1 | country),
+                 data = gffDF[gffDF$gff_partner == 1,], 
+                 family = beta_family(link = "logit"))
+                 
+model1_result <- summary(model1)
+```
+
+```{r, echo = FALSE}
+print(model1_result)
+```
+
+#### Model 2: Test the exclusion of `ida_commit` from the model
+
+``` {r model_2, include = FALSE}
+# Exclude `ida_commit` from the model
+model2 <- glmmTMB(ida_prop ~ time + partner + time:partner + (1 | country), 
+                 ziformula = ~ time + partner + time:partner + (1 | country),
+                 data = gffDF[gffDF$gff_partner == 1,], 
+                 family = beta_family(link = "logit"))
+                 
+model2_result <- summary(model2)
+```
+
+```{r, echo = FALSE}
+print(model2_result)
+```
+
+Test the significance of the difference between the full and the reduced model that excludes the value of the total IDA commitment to a country in a particular year.
+
+```{r}
+anova(model1, model2)
+```
+
+#### Model 3: Test the exclusion of the interaction effect: `year_c:treatment_flag`
+
+``` {r model_3, include = FALSE}
+# Exclude the interaction effect: `year_c:treatment_flag`
+model3 <- glmmTMB(ida_prop ~ time + partner + log(ida_commit)  + (1 | country), 
+                 ziformula = ~ time + partner + log(ida_commit) + (1 | country),
+                 data = gffDF[gffDF$gff_partner == 1,], 
+                 family = beta_family(link = "logit"))
+                 
+model3_result <- summary(model3)
+```
+
+```{r, echo = FALSE}
+print(model3_result)
+```
+
+Test the significance of the difference between the full and the reduced model that excludes the interaction effect of `year_c: treatment_flag`.
+
+```{r}
+anova(model1, model3)
+```
